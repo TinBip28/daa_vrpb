@@ -134,7 +134,7 @@ def solve_one_instance_with_trained_agent(env_instance, agent, max_tours_per_ins
 def main_improved_vrpb():
     # --- Cấu hình cho quá trình huấn luyện và đánh giá ---
     DATA_FILENAME = "data_10_customers_corner_depot.xlsx" 
-    MODEL_NAME_BASE = "improved_vrpb_strict_eval_policy_v2" # Đổi tên model để không ghi đè
+    MODEL_NAME_BASE = "improved_vrpb_policy" # Đổi tên model để không ghi đè
     PROBLEM_TYPE = "improved"
     UTILIZATION_WEIGHT = 15.0 # Có thể thử nghiệm với giá trị này
     PENALTY_NOT_ALL_SERVED = -2000 # Hình phạt khi không phục vụ hết KH trong training
@@ -153,9 +153,9 @@ def main_improved_vrpb():
     agent = REINFORCEAgent(state_dim, action_space_size, hidden_dim=128, learning_rate=2e-4, gamma=0.99)
     # agent.load_model(f"{MODEL_NAME_BASE}_best.pth") 
 
-    num_episodes_train = 3000 # Tăng số episodes
+    num_episodes_train = 300 # Tăng số episodes
     max_steps_per_tour_train = env.num_nodes + 7 # Tăng nhẹ số bước cho mỗi tour
-    log_interval = 100
+    log_interval = 10
     best_eval_distance = float('inf') 
     all_episode_total_distances_train_log = [] # Để log AvgTrainDist
     successful_eval_count_log = 0 # Để theo dõi số lần eval thành công
