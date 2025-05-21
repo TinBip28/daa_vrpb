@@ -153,9 +153,9 @@ def main_improved_vrpb():
     agent = REINFORCEAgent(state_dim, action_space_size, hidden_dim=128, learning_rate=2e-4, gamma=0.99)
     # agent.load_model(f"{MODEL_NAME_BASE}_best.pth") 
 
-    num_episodes_train = 300 # Tăng số episodes
+    num_episodes_train = 30 # Tăng số episodes
     max_steps_per_tour_train = env.num_nodes + 7 # Tăng nhẹ số bước cho mỗi tour
-    log_interval = 10
+    log_interval = 1
     best_eval_distance = float('inf') 
     all_episode_total_distances_train_log = [] # Để log AvgTrainDist
     successful_eval_count_log = 0 # Để theo dõi số lần eval thành công

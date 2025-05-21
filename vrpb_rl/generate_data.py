@@ -138,8 +138,8 @@ if __name__ == "__main__":
     # Ví dụ tạo dữ liệu với depot ở góc (không cần grid_size)
     generate_vrpb_instance_to_excel(
         num_customers=20, 
-        num_linehaul=10, 
-        vehicle_capacity=10,
+        num_linehaul=7, 
+        vehicle_capacity=150,
         depot_location="corner", 
         filename="data_20_customers_corner_depot.xlsx"
     )
@@ -163,7 +163,7 @@ if __name__ == "__main__":
 
     generate_vrpb_instance_to_excel(
         num_customers=100,
-        num_linehaul=10,
+        num_linehaul=30,
         vehicle_capacity=1000,
         depot_location="corner",
         filename="data_100_customers_corner_depot.xlsx"

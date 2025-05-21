@@ -8,28 +8,15 @@ from ga_core import run_ga_for_vrpb # Đảm bảo ga_core.py và vrpb_ga_utils.
 
 def main_improved_ga_vrpb():
     # --- Cấu hình Instance và Loại bài toán ---
-    DATA_DIR = "DAA_VRPB" # Thư mục chứa dữ liệu
-    INSTANCE_NAME = "data_10_customers_center_depot.xlsx"
-    DATA_FILENAME = os.path.join(DATA_DIR, INSTANCE_NAME)
+    DATA_FILENAME = "data_10_customers_corner_depot.xlsx"  # Tên file Excel chứa dữ liệu instance
     PROBLEM_TYPE = "improved" 
 
-    # Tạo thư mục và file dữ liệu Excel mẫu nếu chưa có
-    if not os.path.exists(DATA_DIR):
-        os.makedirs(DATA_DIR, exist_ok=True)
-    if not os.path.exists(DATA_FILENAME):
-        print(f"Tạo file dữ liệu Excel mẫu: {DATA_FILENAME}")
-        generate_vrpb_instance_to_excel( # Gọi hàm tạo file Excel
-            num_customers=15, 
-            num_linehaul=7, 
-            vehicle_capacity=150,
-            depot_location="center", 
-            filename=DATA_FILENAME
-        )
+   
 
     # --- Cấu hình Tham số GA ---
     ga_params_config = {
-        'POPULATION_SIZE': 100,
-        'NUM_GENERATIONS': 200,
+        'POPULATION_SIZE': 10,
+        'NUM_GENERATIONS': 50,
         'MUTATION_RATE': 0.05,
         'CROSSOVER_RATE': 0.85,
         'TOURNAMENT_SIZE': 5,
@@ -58,7 +45,7 @@ def main_improved_ga_vrpb():
         print(f"\nGiải pháp tốt nhất (Cải tiến) - Tổng quãng đường: {best_distance:.2f}")
         print(f"Số lộ trình: {len(best_tours)}")
         visualize_vrpb_solution(instance_data, best_tours, best_distance, 
-                                title=f"GA - VRPB Cải tiến ({INSTANCE_NAME})")
+                                title=f"GA - VRPB Cải tiến ({DATA_FILENAME})",)
     else:
         print("\nGA không tìm thấy giải pháp hợp lệ hoặc không có giải pháp với quãng đường hữu hạn.")
 
