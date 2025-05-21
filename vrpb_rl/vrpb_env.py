@@ -87,23 +87,35 @@ class VRPBEnv:
             # Không còn hành động nào hợp lệ khác (episode nên kết thúc)
             return valid_actions # Trả về mảng toàn False
 
+        # --- SỬA ĐỔI BẮT ĐẦU TẠI ĐÂY ---
+        # Kiểm tra xem có còn khách hàng linehaul nào chưa được phục vụ trên toàn cục không
+        # Điều này chỉ quan trọng khi bắt đầu tour mới từ kho cho VRPB truyền thống
+        still_unvisited_linehauls_globally = False
+        if self.problem_type == "traditional" and self.current_location_idx == self.depot_idx and len(self.current_tour_plan) == 1:
+            for i in range(1, self.num_linehaul_customers + 1):
+                if not self.global_visited_mask[i]:
+                    still_unvisited_linehauls_globally = True
+                    break
+        # --- KẾT THÚC SỬA ĐỔI ---
+
         for next_node_idx in range(self.num_nodes):
             if next_node_idx == self.depot_idx:
-                # Cho phép quay về depot nếu tour không rỗng (đã có KH trong kế hoạch)
-                # Hoặc nếu không còn lựa chọn nào khác cho khách hàng
                 can_return_to_depot = False
                 if len(self.current_tour_plan) > 1:
                     can_return_to_depot = True
-                else: # Tour rỗng, kiểm tra xem có KH nào đi được không
+                else:
                     has_other_valid_customer_move = False
-                    for temp_idx in range(1, self.num_nodes): # Kiểm tra các KH khác
-                        if not self.global_visited_mask[temp_idx]: # Nếu có KH chưa thăm
-                            # (Cần kiểm tra thêm các ràng buộc khác cho temp_idx ở đây nếu muốn chính xác tuyệt đối,
-                            # nhưng để đơn giản, chỉ cần có KH chưa thăm là có thể chưa cần về depot)
+                    for temp_idx in range(1, self.num_nodes):
+                        if not self.global_visited_mask[temp_idx]:
+                            # (Tạm thời bỏ qua kiểm tra chi tiết các ràng buộc khác cho temp_idx ở đây để đơn giản hóa)
+                            # Chỉ cần có KH chưa thăm là có thể chưa cần về depot ngay
+                            node_type_temp = get_node_type_from_index(temp_idx, self.num_linehaul_customers)
+                            if self.problem_type == "traditional" and still_unvisited_linehauls_globally and node_type_temp == "backhaul":
+                                continue # Không tính backhaul này là lựa chọn nếu còn linehaul toàn cục (khi ở depot)
                             has_other_valid_customer_move = True
                             break
-                    if not has_other_valid_customer_move: # Nếu không còn KH nào khác để đi
-                        can_return_to_depot = True # Có thể về depot (dù tour rỗng)
+                    if not has_other_valid_customer_move:
+                        can_return_to_depot = True
 
                 if can_return_to_depot:
                     valid_actions[next_node_idx] = True
@@ -115,6 +127,16 @@ class VRPBEnv:
             demand_at_next_node = self.demands[next_node_idx]
             node_type = get_node_type_from_index(next_node_idx, self.num_linehaul_customers)
 
+            # --- SỬA ĐỔI BẮT ĐẦU TẠI ĐÂY ---
+            # Áp dụng ràng buộc (5) cho VRPB truyền thống khi bắt đầu tour mới từ kho
+            if self.problem_type == "traditional" and \
+               self.current_location_idx == self.depot_idx and \
+               len(self.current_tour_plan) == 1 and \
+               node_type == "backhaul" and \
+               still_unvisited_linehauls_globally:
+                continue # Không cho phép đi đến backhaul nếu còn linehaul toàn cục chưa phục vụ
+            # --- KẾT THÚC SỬA ĐỔI ---
+
             temp_linehaul_payload = self.current_linehaul_payload
             temp_backhaul_collected = self.current_backhaul_collected
             can_serve_capacity = True
@@ -123,34 +145,39 @@ class VRPBEnv:
                 projected_lh_needed = temp_linehaul_payload + demand_at_next_node
                 if projected_lh_needed > self.vehicle_capacity:
                     can_serve_capacity = False
+                # Trong VRPB truyền thống, không được giao hàng linehaul nếu đã có hàng backhaul trên xe (trong tour này)
                 if self.problem_type == "traditional" and self.current_backhaul_collected > 0:
-                     can_serve_capacity = False
+                     can_serve_capacity = False # Đổi tên biến này thành can_serve_sequence sẽ rõ ràng hơn
             elif node_type == "backhaul":
                 projected_bh_collected = temp_backhaul_collected + abs(demand_at_next_node)
                 if projected_bh_collected > self.vehicle_capacity:
                     can_serve_capacity = False
             
-            if not can_serve_capacity:
+            if not can_serve_capacity: # Đổi tên biến này thành can_serve_due_to_capacity_and_strict_sequence
                 continue
 
-            can_serve_sequence = True
+            can_serve_sequence_within_tour = True # Đổi tên biến để rõ ràng hơn
             if self.problem_type == "traditional":
-                linehauls_in_plan_not_yet_visited = False
-                for planned_node_idx in self.current_tour_plan:
-                    if planned_node_idx != self.depot_idx and \
-                       get_node_type_from_index(planned_node_idx, self.num_linehaul_customers) == "linehaul" and \
-                       not self.visited_in_current_tour_mask[planned_node_idx]:
-                        linehauls_in_plan_not_yet_visited = True
+                # Kiểm tra xem có linehaul nào trong kế hoạch tour hiện tại chưa được thăm không
+                linehauls_in_plan_not_yet_visited_in_tour = False
+                for planned_node_idx_in_tour in self.current_tour_plan: # Chỉ xét các nút đã có trong kế hoạch tour
+                    if planned_node_idx_in_tour != self.depot_idx and \
+                       get_node_type_from_index(planned_node_idx_in_tour, self.num_linehaul_customers) == "linehaul" and \
+                       not self.visited_in_current_tour_mask[planned_node_idx_in_tour]: # Kiểm tra nút đó đã được thăm trong tour này chưa
+                        linehauls_in_plan_not_yet_visited_in_tour = True
                         break
                 
                 if node_type == "linehaul":
-                    if self.current_backhaul_collected > 0 :
-                         can_serve_sequence = False
+                    # Điều kiện này đã được xử lý ở trên (current_backhaul_collected > 0)
+                    pass
                 elif node_type == "backhaul":
-                    if self.current_linehaul_payload > 0 and linehauls_in_plan_not_yet_visited:
-                        can_serve_sequence = False
-            
-            if not can_serve_sequence:
+                    # Không được đi backhaul nếu còn linehaul ĐÃ LÊN KẾ HOẠCH trong tour này mà chưa giao
+                    # VÀ xe đang có hàng linehaul (current_linehaul_payload > 0)
+                    # Hoặc đơn giản hơn, nếu linehauls_served_in_tour_flag là False (nghĩa là giai đoạn linehaul của tour chưa xong)
+                    if not self.linehauls_served_in_tour_flag and self.current_linehaul_payload > 0 : # Nếu còn hàng LH trên xe và cờ chưa bật
+                         can_serve_sequence_within_tour = False
+
+            if not can_serve_sequence_within_tour:
                 continue
             
             valid_actions[next_node_idx] = True

@@ -134,7 +134,7 @@ def main_traditional_vrpb(): # Đổi tên hàm cho phù hợp nếu bạn đang
     # agent.load_model(f"{MODEL_NAME_BASE}_best.pth")
 
     # Tham số huấn luyện đồng bộ
-    num_episodes_train = 300 
+    num_episodes_train = 300
     max_steps_per_tour_train = env.num_nodes + 10 
     log_interval = 10
     best_eval_distance = float('inf')
