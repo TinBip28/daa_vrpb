@@ -133,7 +133,7 @@ class VRPBEnv:
                self.current_location_idx == self.depot_idx and \
                len(self.current_tour_plan) == 1 and \
                node_type == "backhaul" and \
-               still_unvisited_linehauls_globally:
+               still_unvisited_linehauls_globally: 
                 continue # Không cho phép đi đến backhaul nếu còn linehaul toàn cục chưa phục vụ
             # --- KẾT THÚC SỬA ĐỔI ---
 
