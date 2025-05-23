@@ -225,7 +225,7 @@ def run_ga_for_vrpb(instance_data, problem_type, ga_config):
         return None, float('inf')
 
     final_fitness, final_dist, final_penalty, final_tours = decode_chromosome_and_calc_fitness(
-        best_overall_chromosome, instance_data, problem_type, apply_local_search=False # Đánh giá cuối không cần LS
+        best_overall_chromosome, instance_data, problem_type, apply_local_search=True
     )
     
     print(f"Giải pháp cuối cùng - Quãng đường: {final_dist:.2f}, Hình phạt: {final_penalty:.2f}, Fitness: {final_fitness:.2f}")

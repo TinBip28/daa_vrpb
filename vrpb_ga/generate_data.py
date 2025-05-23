@@ -1,14 +1,9 @@
-# vrpb_rl_simple_pg/generate_data.py
-import numpy as np
+# vrpb_ga/generate_data.py (Hoặc bạn có thể tạo file data_loader_ga.py)
 import pandas as pd
+import numpy as np
 
 def generate_vrpb_instance_to_excel(num_customers, num_linehaul, vehicle_capacity,
                                     depot_location="corner", filename="vrpb_instance.xlsx"):
-    # ... (Nội dung hàm này giữ nguyên như bạn đã cung_cấp) ...
-    # Đảm bảo nó tạo file Excel với 2 sheet "Nodes" và "InstanceInfo"
-    # và thông tin trong InstanceInfo bao gồm:
-    # 'num_customers', 'num_linehaul', 'vehicle_capacity', 'num_nodes', 'depot_location'
-
     if num_linehaul > num_customers:
         raise ValueError("Số lượng khách hàng linehaul không thể lớn hơn tổng số khách hàng.")
 
@@ -33,7 +28,7 @@ def generate_vrpb_instance_to_excel(num_customers, num_linehaul, vehicle_capacit
     node_ids_list = []
     node_types_list = []
 
-    node_ids_list.append(0)
+    node_ids_list.append(0) # Node ID trong file Excel, không phải index nội bộ
     coords_list.append(depot_coord.tolist())
     demands_list.append(0)
     node_types_list.append("depot")
@@ -41,7 +36,7 @@ def generate_vrpb_instance_to_excel(num_customers, num_linehaul, vehicle_capacit
     customer_coords_generated = np.random.uniform(low=customer_min_coord, high=customer_max_coord, size=(num_customers, 2))
     
     for i in range(num_customers):
-        node_id = i + 1
+        node_id = i + 1 # Node ID trong file Excel
         node_ids_list.append(node_id)
         coords_list.append(customer_coords_generated[i].tolist())
         
@@ -49,7 +44,7 @@ def generate_vrpb_instance_to_excel(num_customers, num_linehaul, vehicle_capacit
             demands_list.append(np.random.randint(5, 20))
             node_types_list.append("linehaul")
         else:
-            demands_list.append(-np.random.randint(5, 20))
+            demands_list.append(-np.random.randint(5, 20)) # Backhaul có demand âm
             node_types_list.append("backhaul")
 
     node_data_df = pd.DataFrame({
@@ -68,6 +63,7 @@ def generate_vrpb_instance_to_excel(num_customers, num_linehaul, vehicle_capacit
             'vehicle_capacity', 
             'num_nodes',
             'depot_location'
+            # Các thông tin khác như num_vehicles (k) có thể được thêm ở đây nếu file Excel cần
         ],
         'Value': [
             num_customers, 
@@ -88,32 +84,24 @@ def generate_vrpb_instance_to_excel(num_customers, num_linehaul, vehicle_capacit
 
 
 def load_vrpb_instance_from_excel(filename="vrpb_instance.xlsx"):
-    """
-    Tải một thực thể VRPB từ file Excel (có 2 sheet: Nodes và InstanceInfo).
-    """
     try:
         xls = pd.ExcelFile(filename)
-        # Đọc sheet 'Nodes', sắp xếp theo Node_ID để đảm bảo thứ tự đúng
         nodes_df = pd.read_excel(xls, 'Nodes').sort_values(by='Node_ID').reset_index(drop=True)
-        # Đọc sheet 'InstanceInfo', đặt cột 'Parameter' làm index để dễ truy cập
         info_df = pd.read_excel(xls, 'InstanceInfo').set_index('Parameter')['Value']
 
         coords = nodes_df[['X_Coord', 'Y_Coord']].values.tolist()
-        demands = nodes_df['Demand'].values.tolist()
+        demands = nodes_df['Demand'].values.tolist() # Giữ nguyên dấu demand từ file
         
         instance_data = {
             "coords": coords,
             "demands": demands,
             "num_customers": int(info_df.loc['num_customers']),
             "num_linehaul": int(info_df.loc['num_linehaul']),
-            "num_nodes": int(info_df.loc['num_nodes']), 
-            "vehicle_capacity": int(info_df.loc['vehicle_capacity']),
-            # Lấy depot_location, nếu không có thì mặc định là 'unknown'
-            "depot_location_info": str(info_df.get('depot_location', 'unknown')) 
+            "num_nodes": int(info_df.loc['num_nodes']),
+            "vehicle_capacity": float(info_df.loc['vehicle_capacity']),
+            "depot_idx": 0, # Mặc định depot là node đầu tiên (index 0)
+            "num_vehicles": int(info_df.get('num_vehicles', info_df.get('k', int(info_df.loc['num_customers'])))) # Lấy 'k' hoặc 'num_vehicles'
         }
-        # Thêm depot_idx vào instance_data
-        instance_data["depot_idx"] = 0 
-        
         print(f"Đã tải dữ liệu VRPB từ file Excel: {filename}")
         return instance_data
     except FileNotFoundError:
@@ -127,46 +115,114 @@ def load_vrpb_instance_from_excel(filename="vrpb_instance.xlsx"):
         return None
 
 
-if __name__ == "__main__":
-    # Ví dụ tạo dữ liệu với depot ở góc (không cần grid_size)
-    generate_vrpb_instance_to_excel(
-        num_customers=20, 
-        num_linehaul=10, 
-        vehicle_capacity=10,
-        depot_location="corner", 
-        filename="data_20_customers_corner_depot.xlsx"
-    )
+def load_instance_from_csv_for_ga(filepath):
+    """
+    Tải dữ liệu instance từ file CSV theo định dạng của dataset_GJ
+    và chuyển đổi sang định dạng instance_data mà GA hiện tại có thể sử dụng.
+    """
+    try:
+        df = pd.read_csv(filepath)
+    except FileNotFoundError:
+        print(f"Lỗi: Không tìm thấy file {filepath}")
+        return None
+    except Exception as e:
+        print(f"Lỗi khi đọc file CSV '{filepath}': {e}")
+        return None
+
+    depot_info_row = df[df['type'] == 0]
+    if depot_info_row.empty:
+        print(f"Lỗi: Không tìm thấy thông tin depot (type 0) trong file {filepath}")
+        return None
+    depot_info = depot_info_row.iloc[0]
+
+    depot_coord = np.array([depot_info['x'], depot_info['y']])
+    vehicle_capacity = depot_info['Q']
+    num_vehicles_from_file = int(depot_info['k']) # Đọc số lượng xe từ cột 'k'
+
+    coords_list = [depot_coord.tolist()] # Node 0 là depot
+    demands_list = [0.0]                 # Demand của depot là 0
     
-    generate_vrpb_instance_to_excel(
-        num_customers=10, 
-        num_linehaul=3, 
-        vehicle_capacity=100,
-        depot_location="corner",
-        filename="data_10_customers_corner_depot.xlsx"
-    )
+    # Sẽ map node_id gốc từ file CSV sang index nội bộ (1 đến N cho khách hàng)
+    # GA làm việc với các index từ 1 đến num_customers
+    
+    num_linehaul = 0
+    num_backhaul = 0
 
-    # Ví dụ tạo dữ liệu với depot ở giữa
-    generate_vrpb_instance_to_excel(
-        num_customers=20, 
-        num_linehaul=10, 
-        vehicle_capacity=200,
-        depot_location="center",
-        filename="data_20_customers_center_depot.xlsx"
-    )
+    # Tách khách hàng linehaul và backhaul, sắp xếp theo node_id gốc để đảm bảo thứ tự nhất quán
+    linehaul_customers_df = df[df['type'] == 1].sort_values(by='node_id').reset_index(drop=True)
+    backhaul_customers_df = df[df['type'] == 2].sort_values(by='node_id').reset_index(drop=True)
 
-    generate_vrpb_instance_to_excel(
-        num_customers=100,
-        num_linehaul=10,
-        vehicle_capacity=1000,
-        depot_location="corner",
-        filename="data_100_customers_corner_depot.xlsx"
-    )
+    # Thêm khách hàng linehaul vào lists
+    for _, row in linehaul_customers_df.iterrows():
+        coords_list.append([row['x'], row['y']])
+        demands_list.append(float(row['demand'])) # Demand dương cho linehaul
+        num_linehaul += 1
 
-    print("\nKiểm tra tải dữ liệu:")
-    loaded_data_corner = load_vrpb_instance_from_excel("data_10_customers_corner_depot.xlsx")
-    if loaded_data_corner:
-        print(f"Tải thành công data_10_customers_corner_depot.xlsx. Depot info: {loaded_data_corner.get('depot_location_info')}")
+    # Thêm khách hàng backhaul vào lists
+    # Các index của backhaul sẽ tiếp nối ngay sau linehaul
+    for _, row in backhaul_customers_df.iterrows():
+        coords_list.append([row['x'], row['y']])
+        demands_list.append(-abs(float(row['demand']))) # Demand âm cho backhaul
+        num_backhaul += 1
 
-    loaded_data_center = load_vrpb_instance_from_excel("data_20_customers_center_depot.xlsx")
-    if loaded_data_center:
-        print(f"Tải thành công data_20_customers_center_depot.xlsx. Depot info: {loaded_data_center.get('depot_location_info')}")
+    num_total_customers = num_linehaul + num_backhaul
+    num_nodes_instance = num_total_customers + 1 # Bao gồm depot
+
+    instance_data = {
+        "coords": coords_list,
+        "demands": demands_list,
+        "num_customers": num_total_customers,
+        "num_linehaul": num_linehaul, # Số khách hàng linehaul này sẽ được dùng bởi get_node_type_from_index
+        "num_nodes": num_nodes_instance,
+        "vehicle_capacity": float(vehicle_capacity),
+        "depot_idx": 0,
+        "num_vehicles": num_vehicles_from_file # Số xe tối đa cho phép
+    }
+    
+    print(f"Đã tải dữ liệu từ file CSV: {filepath} cho GA")
+    print(f"  Tổng số nút (bao gồm depot): {instance_data['num_nodes']}")
+    print(f"  Số khách hàng Linehaul: {instance_data['num_linehaul']}")
+    print(f"  Số khách hàng Backhaul: {num_backhaul}")
+    print(f"  Dung lượng xe: {instance_data['vehicle_capacity']}")
+    print(f"  Số xe tối đa cho phép: {instance_data['num_vehicles']}")
+    return instance_data
+
+if __name__ == '__main__':
+    # Test thử hàm load CSV
+    # Đảm bảo bạn có file A1.csv trong đường dẫn tương đối hoặc tuyệt đối chính xác
+    # Ví dụ: filepath_csv = "../dataset_GJ/Vehicle-Routing-Problem-with-Backhaul/GJ/A1.csv"
+    # Hoặc nếu dataset_GJ cùng cấp với thư mục chứa vrpb_ga:
+    filepath_csv = "../../dataset_GJ/Vehicle-Routing-Problem-with-Backhaul/GJ/A1.csv" 
+    # Điều chỉnh đường dẫn này cho phù hợp với cấu trúc thư mục của bạn
+
+    # Kiểm tra xem file có tồn tại không trước khi load
+    import os
+    if os.path.exists(filepath_csv):
+        data_csv = load_instance_from_csv_for_ga(filepath_csv)
+        if data_csv:
+            print("\nKiểm tra dữ liệu đã tải từ CSV:")
+            print(f"  Tọa độ Depot: {data_csv['coords'][data_csv['depot_idx']]}")
+            print(f"  Demand Depot: {data_csv['demands'][data_csv['depot_idx']]}")
+            print(f"  Số lượng xe: {data_csv['num_vehicles']}")
+            if data_csv['num_linehaul'] > 0:
+                print(f"  Tọa độ KH Linehaul đầu tiên (Node 1 theo index nội bộ): {data_csv['coords'][1]}")
+                print(f"  Demand KH Linehaul đầu tiên (Node 1 theo index nội bộ): {data_csv['demands'][1]}")
+            if data_csv['num_customers'] > data_csv['num_linehaul']:
+                first_bh_internal_idx = data_csv['num_linehaul'] + 1
+                print(f"  Tọa độ KH Backhaul đầu tiên (Node {first_bh_internal_idx} theo index nội bộ): {data_csv['coords'][first_bh_internal_idx]}")
+                print(f"  Demand KH Backhaul đầu tiên (Node {first_bh_internal_idx} theo index nội bộ): {data_csv['demands'][first_bh_internal_idx]}")
+    else:
+        print(f"Lỗi: Không tìm thấy file dữ liệu CSV tại '{filepath_csv}'. Vui lòng kiểm tra đường dẫn.")
+
+    # # Test tạo file Excel (nếu cần)
+    # generate_vrpb_instance_to_excel(
+    #     num_customers=5,
+    #     num_linehaul=2,
+    #     vehicle_capacity=50,
+    #     depot_location="corner",
+    #     filename="test_ga_excel.xlsx"
+    # )
+    # data_excel = load_vrpb_instance_from_excel("test_ga_excel.xlsx")
+    # if data_excel:
+    #     print("\nKiểm tra dữ liệu đã tải từ Excel:")
+    #     print(data_excel)

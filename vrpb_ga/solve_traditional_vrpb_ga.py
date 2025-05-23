@@ -1,52 +1,46 @@
-# vrpb_rl_simple_pg/solve_traditional_vrpb_ga.py
+# vrpb_ga/solve_traditional_vrpb_ga.py
 import time
 import os
-# Sử dụng hàm load_vrpb_instance_from_excel
-from generate_data import load_vrpb_instance_from_excel, generate_vrpb_instance_to_excel 
-from utils import visualize_vrpb_solution
-from ga_core import run_ga_for_vrpb # Đảm bảo ga_core.py và vrpb_ga_utils.py ở đúng vị trí
+# Sử dụng hàm load CSV mới
+from generate_data import load_instance_from_csv_for_ga # Đảm bảo tên file và hàm đúng
+from utils import visualize_vrpb_solution # Import từ utils trong cùng thư mục vrpb_ga
+from ga_core import run_ga_for_vrpb
 
 def main_traditional_ga_vrpb():
     # --- Cấu hình Instance và Loại bài toán ---
-    # DATA_FILENAME trỏ đến file Excel
-    DATA_DIR = "DAA_VRPB" # Thư mục chứa dữ liệu
-    INSTANCE_NAME = "data_10_customers_center_depot.xlsx" # Tên file dữ liệu
-    DATA_FILENAME = os.path.join(DATA_DIR, INSTANCE_NAME)
-    PROBLEM_TYPE = "traditional"
+    # Thay đổi đường dẫn gốc này cho phù hợp với cấu trúc thư mục của bạn
+    # Ví dụ: nếu thư mục dataset_GJ nằm ngoài thư mục daa_vrpb-main
+    # DATA_ROOT_DIR = "../../dataset_GJ/Vehicle-Routing-Problem-with-Backhaul/GJ"
+    # Hoặc nếu dataset_GJ nằm trong daa_vrpb-main:
+    DATA_ROOT_DIR = "dataset_GJ/Vehicle-Routing-Problem-with-Backhaul/GJ"
+    
+    INSTANCE_NAME = "E1.csv" # Chọn file instance
+    
+    DATA_FILENAME = os.path.join(DATA_ROOT_DIR, INSTANCE_NAME)
+    
 
-    # Tạo thư mục và file dữ liệu Excel mẫu nếu chưa có
-    if not os.path.exists(DATA_DIR):
-        os.makedirs(DATA_DIR, exist_ok=True)
-    if not os.path.exists(DATA_FILENAME):
-        print(f"Tạo file dữ liệu Excel mẫu: {DATA_FILENAME}")
-        generate_vrpb_instance_to_excel( # Gọi hàm tạo file Excel
-            num_customers=10, 
-            num_linehaul=5, 
-            vehicle_capacity=100,
-            depot_location="corner", 
-            filename=DATA_FILENAME
-        )
+    PROBLEM_TYPE = "traditional"
 
     # --- Cấu hình Tham số GA ---
     ga_params_config = {
-        'POPULATION_SIZE': 100,
-        'NUM_GENERATIONS': 200,
+        'POPULATION_SIZE': 100, # Có thể điều chỉnh
+        'NUM_GENERATIONS': 100, # Có thể điều chỉnh
         'MUTATION_RATE': 0.05,
-        'CROSSOVER_RATE': 0.85,
+        'CROSSOVER_RATE': 0.9,
         'TOURNAMENT_SIZE': 5,
         'ELITISM_COUNT': 3,
         'APPLY_LOCAL_SEARCH': True
     }
     
-    # Tải dữ liệu từ file Excel duy nhất
-    instance_data = load_vrpb_instance_from_excel(DATA_FILENAME) 
+    instance_data = load_instance_from_csv_for_ga(DATA_FILENAME)
     
     if not instance_data:
-        print(f"Không thể tải dữ liệu instance từ file Excel: {DATA_FILENAME}")
+        print(f"Không thể tải dữ liệu instance từ file CSV: {DATA_FILENAME}")
         return
 
-    print(f"Bắt đầu giải bài toán VRPB Truyền thống cho instance: {DATA_FILENAME}")
+    print(f"\nBắt đầu giải bài toán VRPB Truyền thống cho instance: {DATA_FILENAME}")
     print(f"Số khách hàng: {instance_data['num_customers']}")
+    print(f"Số xe tối đa: {instance_data.get('num_vehicles', 'Không giới hạn')}") # In ra số xe
     print(f"Tham số GA: Pop={ga_params_config['POPULATION_SIZE']}, Gen={ga_params_config['NUM_GENERATIONS']}, LS={ga_params_config['APPLY_LOCAL_SEARCH']}")
 
     start_time = time.time()
@@ -57,9 +51,21 @@ def main_traditional_ga_vrpb():
 
     if best_tours and best_distance != float('inf'):
         print(f"\nGiải pháp tốt nhất (Truyền thống) - Tổng quãng đường: {best_distance:.2f}")
-        print(f"Số lộ trình: {len(best_tours)}")
-        visualize_vrpb_solution(instance_data, best_tours, best_distance, 
-                                title=f"GA - VRPB Truyền thống ({INSTANCE_NAME})")
+        print(f"Số lộ trình thực tế: {len(best_tours)}")
+        
+        # Đếm số xe thực sự có khách hàng trong giải pháp tốt nhất
+        actual_vehicles_in_best_solution = 0
+        for tour in best_tours:
+            if len(tour) > 2 : # Có ít nhất 1 khách hàng
+                actual_vehicles_in_best_solution +=1
+        print(f"Số xe có lộ trình (có KH): {actual_vehicles_in_best_solution} / {instance_data.get('num_vehicles', 'Không giới hạn')} (cho phép)")
+
+        if "coords" in instance_data and "num_linehaul" in instance_data and "num_customers" in instance_data:
+            visualize_vrpb_solution(instance_data, best_tours, best_distance,
+                                    title=f"GA - VRPB Truyền thống ({INSTANCE_NAME})")
+        else:
+            print("Không đủ thông tin instance_data để visualize.")
+            for i, tour in enumerate(best_tours): print(f"  Lộ trình {i+1}: {tour}")
     else:
         print("\nGA không tìm thấy giải pháp hợp lệ hoặc không có giải pháp với quãng đường hữu hạn.")
 

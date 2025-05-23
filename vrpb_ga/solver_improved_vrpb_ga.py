@@ -2,21 +2,24 @@
 import time
 import os
 # Sử dụng hàm load_vrpb_instance_from_excel
-from generate_data import load_vrpb_instance_from_excel, generate_vrpb_instance_to_excel
+from generate_data import load_instance_from_csv_for_ga # Đảm bảo tên file và hàm đúng
 from utils import visualize_vrpb_solution
 from ga_core import run_ga_for_vrpb # Đảm bảo ga_core.py và vrpb_ga_utils.py ở đúng vị trí
 
 def main_improved_ga_vrpb():
     # --- Cấu hình Instance và Loại bài toán ---
-    DATA_FILENAME = "data_10_customers_corner_depot.xlsx"  # Tên file Excel chứa dữ liệu instance
+    DATAROOT_DIR = "dataset_GJ/Vehicle-Routing-Problem-with-Backhaul/GJ"
+    INSTANCE_NAME = "E1.csv"  # Chọn file instance
+    DATA_FILENAME = os.path.join(DATAROOT_DIR, INSTANCE_NAME)
+
     PROBLEM_TYPE = "improved" 
 
    
 
     # --- Cấu hình Tham số GA ---
     ga_params_config = {
-        'POPULATION_SIZE': 10,
-        'NUM_GENERATIONS': 50,
+        'POPULATION_SIZE': 200,
+        'NUM_GENERATIONS': 100,
         'MUTATION_RATE': 0.05,
         'CROSSOVER_RATE': 0.85,
         'TOURNAMENT_SIZE': 5,
@@ -25,7 +28,7 @@ def main_improved_ga_vrpb():
     }
     
     # Tải dữ liệu từ file Excel duy nhất
-    instance_data = load_vrpb_instance_from_excel(DATA_FILENAME)
+    instance_data = load_instance_from_csv_for_ga(DATA_FILENAME)
     
     if not instance_data:
         print(f"Không thể tải dữ liệu instance từ file Excel: {DATA_FILENAME}")

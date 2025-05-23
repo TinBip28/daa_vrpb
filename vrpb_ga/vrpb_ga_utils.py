@@ -9,64 +9,104 @@ PENALTY_CAPACITY_MULTIPLIER = 200
 PENALTY_ORDER = 5000
 PENALTY_UNSERVED_CUSTOMER = 200000
 
-def apply_2_opt_on_tour(tour_nodes, coords):
+def is_traditional_tour_valid(tour_nodes, instance_data):
     """
-    Áp dụng thuật toán 2-opt để cải thiện một lộ trình đơn lẻ.
-    Một lộ trình bao gồm điểm bắt đầu và kết thúc là depot.
-    Ví dụ: [0, 1, 2, 0]
+    Kiểm tra xem một lộ trình đơn lẻ có tuân thủ các quy tắc của VRPB Truyền thống không.
+    1. Tất cả linehaul phải đến trước tất cả backhaul.
+    2. Tổng demand của đoạn linehaul không vượt quá dung lượng.
+    3. Tổng demand (absolute) của đoạn backhaul không vượt quá dung lượng.
+    Lộ trình tour_nodes bao gồm depot ở đầu và cuối.
+    """
+    if not tour_nodes or len(tour_nodes) < 2: # Tour rỗng hoặc không hợp lệ
+        return True # Coi như hợp lệ nếu không có gì để kiểm tra
+
+    demands = instance_data["demands"] # LH > 0, BH < 0
+    vehicle_capacity = instance_data["vehicle_capacity"]
+    num_linehaul_customers = instance_data["num_linehaul"]
+    depot_idx = instance_data["depot_idx"]
+
+    customer_nodes_in_tour = [node for node in tour_nodes if node != depot_idx]
+    if not customer_nodes_in_tour: # Tour chỉ có depot [0,0]
+        return True
+
+    # 1. Kiểm tra thứ tự Linehaul - Backhaul
+    linehaul_phase_ended = False
+    for node_idx in customer_nodes_in_tour:
+        node_type = get_node_type_from_index(node_idx, num_linehaul_customers)
+        if node_type == "linehaul":
+            if linehaul_phase_ended:
+                return False # Lỗi: Linehaul sau khi đã có Backhaul
+        elif node_type == "backhaul":
+            linehaul_phase_ended = True
+
+    # 2. Kiểm tra dung lượng cho đoạn Linehaul và Backhaul riêng biệt
+    current_linehaul_demand_sum = 0
+    current_backhaul_demand_sum = 0
+
+    for node_idx in customer_nodes_in_tour:
+        node_type = get_node_type_from_index(node_idx, num_linehaul_customers)
+        demand_val = demands[node_idx]
+
+        if node_type == "linehaul":
+            current_linehaul_demand_sum += demand_val
+            if current_linehaul_demand_sum > vehicle_capacity + 1e-6: # Thêm epsilon để tránh lỗi float
+                return False
+        elif node_type == "backhaul":
+            current_backhaul_demand_sum += abs(demand_val)
+            if current_backhaul_demand_sum > vehicle_capacity + 1e-6:
+                return False
+    
+    return True
+
+
+def apply_2_opt_on_tour(tour_nodes, coords, instance_data, problem_type):
+    """
+    Áp dụng thuật toán 2-opt để cải thiện một lộ trình đơn lẻ,
+    có kiểm tra ràng buộc nếu problem_type là "traditional".
     """
     if not tour_nodes or len(tour_nodes) <= 3: # Cần ít nhất 2 khách hàng (4 nút)
         return tour_nodes
 
     current_tour = list(tour_nodes)
     num_nodes_in_tour = len(current_tour)
-    improved = True
+    
+    # Chỉ áp dụng kiểm tra ràng buộc nếu problem_type là "traditional"
+    needs_constraint_check = (problem_type == "traditional")
 
+    improved = True
     while improved:
         improved = False
-        min_change_in_iteration = 0 # Theo dõi thay đổi tốt nhất trong một vòng lặp 2-opt
-
-        # Chỉ lặp qua các nút khách hàng, bỏ qua depot ở đầu và cuối
-        # Cạnh (i, i+1) và (j, j+1)
-        # Ta sẽ tạo các cạnh mới (i, j) và (i+1, j+1)
-        # và đảo ngược đoạn từ i+1 đến j.
-        # Các chỉ số i, j ở đây là chỉ số trong list current_tour.
-        # Depot đầu là current_tour[0], depot cuối là current_tour[num_nodes_in_tour-1]
-        # Khách hàng nằm từ current_tour[1] đến current_tour[num_nodes_in_tour-2]
-
+        
         for i in range(num_nodes_in_tour - 3): # i từ 0 (depot) đến num_nodes_in_tour - 4
-                                               # để i+1 không phải là depot cuối
             for j in range(i + 2, num_nodes_in_tour - 1): # j từ i+2 đến num_nodes_in_tour - 2
-                                                          # để j không phải là depot cuối và (j, j+1) hợp lệ
+                # Tạo tour mới sau khi hoán đổi
+                new_segment = current_tour[i+1 : j+1]
+                new_segment.reverse()
+                temp_new_tour = current_tour[:i+1] + new_segment + current_tour[j+1:]
+                
+                # Tính toán quãng đường đầy đủ của tour mới
+                new_full_dist = 0
+                for k in range(len(temp_new_tour) - 1):
+                    new_full_dist += calculate_distance(coords[temp_new_tour[k]], coords[temp_new_tour[k+1]])
 
-                # original_edge1 = (current_tour[i], current_tour[i+1])
-                # original_edge2 = (current_tour[j], current_tour[j+1])
-                # new_edge1 = (current_tour[i], current_tour[j])
-                # new_edge2 = (current_tour[i+1], current_tour[j+1])
+                # Tính toán quãng đường đầy đủ của tour hiện tại
+                current_full_dist = 0
+                for k in range(len(current_tour) - 1):
+                    current_full_dist += calculate_distance(coords[current_tour[k]], coords[current_tour[k+1]])
 
-                # Kiểm tra nếu i là depot và j là khách hàng cuối cùng trước depot cuối
-                # hoặc i+1 là khách hàng đầu tiên và j+1 là depot cuối.
-                # Điều này đảm bảo các cạnh đang xem xét là hợp lệ.
-                # current_tour[0] ... current_tour[i] -- current_tour[i+1] ... current_tour[j] -- current_tour[j+1] ... current_tour[end]
-
-                original_dist = (calculate_distance(coords[current_tour[i]], coords[current_tour[i+1]]) +
-                                 calculate_distance(coords[current_tour[j]], coords[current_tour[j+1]]))
-
-                new_dist = (calculate_distance(coords[current_tour[i]], coords[current_tour[j]]) +
-                            calculate_distance(coords[current_tour[i+1]], coords[current_tour[j+1]]))
-
-                change = new_dist - original_dist
-
-                if change < min_change_in_iteration - 1e-9: # Cải thiện đáng kể (tránh lỗi float)
-                    min_change_in_iteration = change
-                    # Thực hiện swap (đảo ngược đoạn giữa i+1 và j)
-                    segment_to_reverse = current_tour[i+1 : j+1]
-                    segment_to_reverse.reverse()
-                    current_tour[i+1 : j+1] = segment_to_reverse
-                    improved = True
-                    # Sau khi thực hiện một cải tiến, bắt đầu lại vòng lặp while (best improvement strategy)
-                    # hoặc tiếp tục tìm kiếm trong vòng lặp for hiện tại (first improvement strategy)
-                    # Ở đây đang dùng first improvement trong vòng for, rồi lặp lại while nếu có cải thiện.
+                if new_full_dist < current_full_dist - 1e-9: # Cải thiện đáng kể
+                    is_valid_move = True
+                    if needs_constraint_check:
+                        # KIỂM TRA RÀNG BUỘC TRUYỀN THỐNG TRƯỚC KHI CHẤP NHẬN HOÁN ĐỔI
+                        if not is_traditional_tour_valid(temp_new_tour, instance_data):
+                            is_valid_move = False
+                    
+                    if is_valid_move:
+                        current_tour = temp_new_tour
+                        improved = True
+                        break # Tìm thấy cải thiện, thoát j và i để bắt đầu lại while
+            if improved:
+                break
     return current_tour
 
 
@@ -141,11 +181,6 @@ def decode_chromosome_and_calc_fitness(chromosome_perm, instance_data, problem_t
             current_lh_payload = 0
             current_bh_collected = 0
             backhaul_started_in_current_tour = False
-            # Khách hàng hiện tại (cust_idx) sẽ được xem xét lại để bắt đầu tour mới ở lần lặp tiếp theo
-            # của vòng while, nếu can_add_to_current_tour là False thì nó sẽ được thử thêm vào tour mới ngay.
-            # Logic này đảm bảo khách hàng không bị bỏ qua.
-            # Nếu khách hàng đầu tiên trong một hoán vị không thể tạo thành tour (ví dụ: quá tải)
-            # thì sẽ có vấn đề. Giả định instance hợp lệ để một khách hàng luôn có thể được phục vụ bởi một xe rỗng.
     
     # Thêm tour cuối cùng nếu còn khách hàng
     if len(current_tour_nodes) > 1:
@@ -155,12 +190,13 @@ def decode_chromosome_and_calc_fitness(chromosome_perm, instance_data, problem_t
     # --- Áp dụng Tìm kiếm Cục bộ (2-opt) ---
     if apply_local_search:
         optimized_tours = []
-        for tour in tours:
-            # 2-opt cần ít nhất 2 khách hàng (4 nút bao gồm depot) để có thể hoán đổi cạnh
-            # Nếu tour là [0, C1, 0], không làm gì cả.
-            # Nếu tour là [0, C1, C2, 0], có thể áp dụng.
+        for tour in tours: # Dòng này định nghĩa 'tour' trong vòng lặp
+            if not tour or len(tour) < 2:
+                continue # Bỏ qua các tour rỗng hoặc quá ngắn không có khách hàng
+
             if len(tour) >= 4:
-                optimized_tours.append(apply_2_opt_on_tour(tour, coords))
+                # TRUYỀN ĐẦY ĐỦ THAM SỐ instance_data VÀ problem_type VÀO HÀM apply_2_opt_on_tour
+                optimized_tours.append(apply_2_opt_on_tour(tour, coords, instance_data, problem_type))
             else:
                 optimized_tours.append(tour)
         tours = optimized_tours
@@ -203,9 +239,6 @@ def decode_chromosome_and_calc_fitness(chromosome_perm, instance_data, problem_t
                 # Kiểm tra tải trọng tại mỗi bước dừng ở khách hàng v
                 if current_lh_payload_eval > vehicle_capacity:
                     total_penalty += (current_lh_payload_eval - vehicle_capacity) * PENALTY_CAPACITY_MULTIPLIER
-                    # Reset payload để tránh phạt nhiều lần cho cùng một lượng quá tải trong tour
-                    # Hoặc phạt một lần cuối tour. Phạt tại mỗi bước sẽ nghiêm khắc hơn.
-                    # Ở đây, ta cộng dồn hình phạt nếu nó tiếp tục quá tải.
                 if current_bh_collected_eval > vehicle_capacity:
                     total_penalty += (current_bh_collected_eval - vehicle_capacity) * PENALTY_CAPACITY_MULTIPLIER
         
